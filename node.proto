@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package mc714.bully;
+
+// Every RPC must be called with an application-level deadline. A timeout is
+// interpreted by the caller according to the failure-detection rules in the
+// README.
+service Node {
+  // Checks whether the target node is reachable and alive.
+  rpc Heartbeat(Ping) returns (Pong);
+
+  // Starts or propagates a Bully election. A node with a higher ID may start
+  // its own election after receiving this request from a lower-ID node.
+  rpc StartElection(ElectionMsg) returns (OkMsg);
+
+  // Announces the coordinator selected by the current election.
+  rpc AnnounceCoordinator(CoordinatorMsg) returns (AckMsg);
+}
+
+message Ping {
+  // ID of the node sending the heartbeat.
+  int32 sender_id = 1;
+
+  // Election associated with the sender's current state.
+  int64 election_id = 2;
+}
+
+message Pong {
+  // ID of the node that handled the heartbeat.
+  int32 responder_id = 1;
+
+  // Election associated with the response.
+  int64 election_id = 2;
+
+  // True when the node is alive and processed the heartbeat.
+  bool alive = 3;
+}
+
+message ElectionMsg {
+  // ID of the node requesting or propagating an election.
+  int32 sender_id = 1;
+
+  // Unique identifier of this election execution.
+  int64 election_id = 2;
+}
+
+message OkMsg {
+  // ID of the node acknowledging the election request.
+  int32 responder_id = 1;
+
+  // Election to which this acknowledgement belongs.
+  int64 election_id = 2;
+
+  // True when the request was accepted and processed.
+  bool accepted = 3;
+}
+
+message CoordinatorMsg {
+  // ID of the node claiming or announcing coordinator status.
+  int32 coordinator_id = 1;
+
+  // ID of the node sending this announcement.
+  int32 sender_id = 2;
+
+  // Election that selected the announced coordinator.
+  int64 election_id = 3;
+}
+
+message AckMsg {
+  // ID of the node acknowledging the coordinator announcement.
+  int32 responder_id = 1;
+
+  // Election to which this acknowledgement belongs.
+  int64 election_id = 2;
+
+  // True when the announcement was accepted and applied.
+  bool accepted = 3;
+}
