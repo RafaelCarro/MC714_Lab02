@@ -80,3 +80,29 @@ python3 -m grpc_tools.protoc \
 
 Isso cria `node_pb2.py` e `node_pb2_grpc.py`. Esses arquivos são gerados e não
 devem ser editados manualmente.
+
+## Execução com Docker Compose
+
+O laboratório sobe três nós independentes. Cada serviço recebe seu identificador
+por `NODE_ID` e escuta a porta `50051` dentro da rede Docker:
+
+```bash
+docker compose up --build
+```
+
+Para acompanhar apenas os logs dos nós:
+
+```bash
+docker compose logs -f
+```
+
+Os nós 1 e 2 enviam um heartbeat ao coordenador (nó 3) a cada três segundos.
+Nesta etapa, uma falha de heartbeat apenas registra `ALERTA: Coordenador caiu.
+Deveria chamar a eleição aqui`; a implementação da eleição será adicionada
+posteriormente.
+
+Para parar e remover os contêineres e a rede:
+
+```bash
+docker compose down
+```
