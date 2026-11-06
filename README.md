@@ -97,12 +97,46 @@ docker compose logs -f
 ```
 
 Os nós 1 e 2 enviam um heartbeat ao coordenador (nó 3) a cada três segundos.
-Nesta etapa, uma falha de heartbeat apenas registra `ALERTA: Coordenador caiu.
-Deveria chamar a eleição aqui`; a implementação da eleição será adicionada
-posteriormente.
+Após duas falhas consecutivas, o nó inicia o algoritmo Bully: consulta os nós
+com ID maior, declara-se coordenador se nenhum responder e anuncia o resultado
+com `AnnounceCoordinator`. O nó 3, por ter o maior ID, vence enquanto estiver
+ativo; se ele cair, o nó 2 vence entre os nós restantes.
 
 Para parar e remover os contêineres e a rede:
 
 ```bash
 docker compose down
 ```
+
+## Testes e experimento
+
+Os testes unitários são executados dentro da imagem, onde `grpcio` e os stubs
+gerados estão disponíveis:
+
+```bash
+docker compose build
+docker compose run --rm node1 pytest -q
+```
+
+O experimento reproduzível executa cenários normal e de falha, varia o intervalo
+do heartbeat em 1, 2 e 3 segundos e repete cada configuração três vezes. Em
+cada repetição, o nó 3 é derrubado e o tempo até o nó 2 assumir é medido:
+python3 scripts/run_experiment.py
+cat experiments/results.csv
+```
+cat experiments/summary.csv
+
+
+`results.csv` contém uma linha por repetição. `summary.csv` contém, para cada
+intervalo, as taxas de sucesso, média, desvio-padrão, p50 e p95 do tempo de
+convergência. Para executar mais repetições, use, por exemplo,
+`EXPERIMENT_REPETITIONS=5 python3 scripts/run_experiment.py`.
+Os parâmetros também podem ser alterados por ambiente:
+
+- `RPC_TIMEOUT_SECONDS`: deadline de cada chamada gRPC;
+- `HEARTBEAT_INTERVAL_SECONDS`: intervalo entre heartbeats;
+- `HEARTBEAT_FAILURE_THRESHOLD`: falhas consecutivas necessárias para iniciar
+	uma eleição.
+
+O modelo do sistema, as propriedades de correção, métricas e limitações estão
+descritos em [REPORT.md](REPORT.md).

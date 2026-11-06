@@ -11,6 +11,9 @@ RUN pip install --no-cache-dir -r requirements.txt \
         node.proto
 
 COPY server.py ./
+COPY tests ./tests
+COPY scripts ./scripts
+COPY pytest.ini ./
 
 ENV PYTHONUNBUFFERED=1
 
