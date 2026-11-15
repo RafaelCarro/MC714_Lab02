@@ -174,6 +174,12 @@ class NodeService(node_pb2_grpc.NodeServicer):
                 self.state.election_active = False
                 accepted = True
 
+        if accepted:
+            print(
+                f"Novo coordenador reconhecido: Nó {request.coordinator_id}",
+                flush=True,
+            )
+
         return node_pb2.AckMsg(
             responder_id=self.state.node_id,
             election_id=request.election_id,
@@ -255,6 +261,9 @@ def main() -> None:
     server.add_insecure_port(f"[::]:{port}")
     server.start()
     print(f"Nó {node_id} escutando na porta {port}", flush=True)
+
+    print(f"Nó {node_id} iniciando eleição", flush=True)
+    start_election(state)
 
     threading.Thread(
         target=heartbeat_loop,
