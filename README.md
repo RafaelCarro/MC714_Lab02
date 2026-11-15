@@ -34,7 +34,7 @@ comunicação ou falha do nó, conforme o cenário do experimento.
 6. O coordenador informa sua vitória aos demais nós com
 	`AnnounceCoordinator`.
 7. O `election_id` identifica uma execução específica de eleição. Uma nova
-	eleição deve usar um valor diferente; recomenda-se gerar o valor com um
+	eleição deve usar um valor diferente.
 	contador local combinado com o ID do nó.
 8. Mensagens de uma eleição antiga não podem substituir o estado de uma
 	eleição mais nova.
@@ -121,11 +121,12 @@ docker compose run --rm node1 pytest -q
 O experimento reproduzível executa cenários normal e de falha, varia o intervalo
 do heartbeat em 1, 2 e 3 segundos e repete cada configuração três vezes. Em
 cada repetição, o nó 3 é derrubado e o tempo até o nó 2 assumir é medido:
+
+```bash
 python3 scripts/run_experiment.py
 cat experiments/results.csv
-```
 cat experiments/summary.csv
-
+```
 
 `results.csv` contém uma linha por repetição. `summary.csv` contém, para cada
 intervalo, as taxas de sucesso, média, desvio-padrão, p50 e p95 do tempo de
@@ -137,6 +138,45 @@ Os parâmetros também podem ser alterados por ambiente:
 - `HEARTBEAT_INTERVAL_SECONDS`: intervalo entre heartbeats;
 - `HEARTBEAT_FAILURE_THRESHOLD`: falhas consecutivas necessárias para iniciar
 	uma eleição.
+
+## Execução com Clusters de Tamanho Variável (Compose Dinâmico)
+
+Para avaliar a escalabilidade do algoritmo Bully com qualquer número de nós (ex: $N=5, 7, 10$), utilize o script gerador:
+
+```bash
+# Gerar um compose com 5 nós (nó 5 como coordenador inicial e intervalo de 1.0s)
+python3 scripts/generate_compose.py -n 5 -c 5 -i 1.0 -o compose.dynamic.yaml
+
+# Iniciar o cluster de 5 nós
+docker compose -f compose.dynamic.yaml up -d
+
+# Visualizar logs
+docker compose -f compose.dynamic.yaml logs -f
+
+# Encerrar e limpar contêineres e volumes órfãos
+docker compose -f compose.dynamic.yaml down --remove-orphans -t 1
+```
+
+## Bateria de Testes Automatizada e Métricas
+
+Além do script de referência do enunciado (`scripts/run_experiment.py`), o projeto conta com uma bateria modular de testes que avalia múltiplos cenários com reset rápido dos contêineres e contagem de mensagens $\mathcal{O}(N^2)$:
+
+```bash
+# Executar bateria completa para N=3, 5, 7 e 10 nós (5 repetições para cada cenário)
+python3 scripts/run_test_battery.py --scenario all -n 3 5 7 10 --repetitions 5
+
+# Cenários disponíveis via --scenario:
+#   baseline      : Falha e recuperação do coordenador
+#   scalability   : Variação de N nós sob falha do coordenador
+#   simultaneous  : Falha simultânea dos dois maiores nós
+#   intermediate  : Falha de nó intermediário (sem afetar o líder)
+#   all           : Executa todos os 4 cenários
+
+# Gerar gráficos comparativos a partir dos resultados da bateria:
+python3 scripts/plot_battery.py
+```
+
+Os dados brutos e sumarizados são salvos em `experiments/battery_results.csv` e `experiments/battery_summary.csv`. Os gráficos são gerados em `experiments/battery_message_scaling.png` e `experiments/battery_convergence_scaling.png`.
 
 O modelo do sistema, as propriedades de correção, métricas e limitações estão
 descritos em [REPORT.md](REPORT.md).
