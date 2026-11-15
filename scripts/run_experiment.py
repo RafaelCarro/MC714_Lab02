@@ -15,6 +15,7 @@ RESULTS = ROOT / "experiments" / "results.csv"
 SUMMARY = ROOT / "experiments" / "summary.csv"
 WINNER_PATTERN = re.compile(r"Eleição .*: nó (\d+) tornou-se coordenador")
 HEARTBEAT_PATTERN = re.compile(r"Pong recebido do nó 3")
+RECOGNIZED_PATTERN = re.compile(r"Novo coordenador reconhecido: Nó (\d+)")
 
 
 def compose(*args: str, env: dict[str, str] | None = None) -> str:
@@ -73,15 +74,36 @@ def run_configuration(interval: float, repetition: int) -> dict[str, object]:
     failure_injected_at = time.monotonic()
     compose("stop", "-t", "1", "node3", env=env)
     deadline = failure_injected_at + 20
-    logs = ""
-    winner = ""
+    failure_winner = ""
     while time.monotonic() < deadline:
         logs = read_logs(env)
-        match = WINNER_PATTERN.search(logs)
-        if match:
-            winner = match.group(1)
+        matches = WINNER_PATTERN.findall(logs)
+        if matches and matches[-1] == "2":
+            failure_winner = "2"
             break
-        time.sleep(0.5)
+        rec_matches = RECOGNIZED_PATTERN.findall(logs)
+        if rec_matches and rec_matches[-1] == "2":
+            failure_winner = "2"
+            break
+        time.sleep(0.3)
+
+    failure_convergence = round(time.monotonic() - failure_injected_at, 3)
+    failure_passed = (failure_winner == "2")
+
+    recovery_injected_at = time.monotonic()
+    compose("start", "node3", env=env)
+    deadline = recovery_injected_at + 20
+    recovery_winner = ""
+    while time.monotonic() < deadline:
+        logs = read_logs(env)
+        rec_matches = RECOGNIZED_PATTERN.findall(logs)
+        if rec_matches and rec_matches[-1] == "3":
+            recovery_winner = "3"
+            break
+        time.sleep(0.3)
+
+    recovery_convergence = round(time.monotonic() - recovery_injected_at, 3)
+    recovery_passed = (recovery_winner == "3")
 
     return {
         "repetition": repetition,
@@ -90,11 +112,12 @@ def run_configuration(interval: float, repetition: int) -> dict[str, object]:
         "failure_threshold": 2,
         "normal_heartbeat_count": normal_heartbeats,
         "normal_passed": normal_passed,
-        "winner_after_node3_failure": winner,
-        "convergence_seconds": round(
-            time.monotonic() - failure_injected_at, 3
-        ),
-        "failure_passed": winner == "2",
+        "winner_after_node3_failure": failure_winner,
+        "convergence_seconds": failure_convergence,
+        "failure_passed": failure_passed,
+        "winner_after_node3_recovery": recovery_winner,
+        "recovery_seconds": recovery_convergence,
+        "recovery_passed": recovery_passed,
     }
 
 
@@ -118,6 +141,7 @@ def summarize(rows: list[dict[str, object]]) -> list[dict[str, object]]:
             if row["heartbeat_interval_seconds"] == interval
         ]
         convergence = [float(row["convergence_seconds"]) for row in selected]
+        recovery = [float(row["recovery_seconds"]) for row in selected]
         summaries.append(
             {
                 "heartbeat_interval_seconds": interval,
@@ -144,6 +168,24 @@ def summarize(rows: list[dict[str, object]]) -> list[dict[str, object]]:
                 ),
                 "convergence_p95_seconds": round(
                     percentile(convergence, 95), 3
+                ),
+                "recovery_pass_rate": round(
+                    sum(row["recovery_passed"] for row in selected)
+                    / len(selected),
+                    3,
+                ),
+                "recovery_mean_seconds": round(
+                    statistics.mean(recovery), 3
+                ),
+                "recovery_stddev_seconds": round(
+                    statistics.stdev(recovery) if len(recovery) > 1 else 0,
+                    3,
+                ),
+                "recovery_p50_seconds": round(
+                    percentile(recovery, 50), 3
+                ),
+                "recovery_p95_seconds": round(
+                    percentile(recovery, 95), 3
                 ),
             }
         )
