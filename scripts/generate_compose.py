@@ -57,6 +57,7 @@ def generate_compose_content(
       RPC_TIMEOUT_SECONDS: "${{RPC_TIMEOUT_SECONDS:-{rpc_timeout}}}"
       HEARTBEAT_INTERVAL_SECONDS: "${{HEARTBEAT_INTERVAL_SECONDS:-{heartbeat_interval}}}"
       HEARTBEAT_FAILURE_THRESHOLD: "${{HEARTBEAT_FAILURE_THRESHOLD:-{failure_threshold}}}"
+      ENABLE_METRICS_LOGS: "${{ENABLE_METRICS_LOGS:-0}}"
     ports:
       - "{host_port}:50051"
 """
