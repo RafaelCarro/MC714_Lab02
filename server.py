@@ -87,7 +87,11 @@ def run_election(state: NodeState, election_id: int) -> None:
     announce_coordinator(state, election_id)
 
 
-def start_election(state: NodeState, election_id: int | None = None) -> None:
+def start_election(
+    state: NodeState,
+    election_id: int | None = None,
+    originated_by: int | None = None,
+) -> None:
     with state.lock:
         if election_id is None:
             election_id = max(state.current_election_id + 1, time.time_ns())
@@ -99,10 +103,16 @@ def start_election(state: NodeState, election_id: int | None = None) -> None:
         state.coordinator_id = None
         state.election_active = True
 
-    print(
-        f"Nó {state.node_id} iniciou a eleição {election_id}",
-        flush=True,
-    )
+    if originated_by is not None:
+        print(
+            f"Nó {state.node_id} assumiu a eleição {election_id} do nó {originated_by}",
+            flush=True,
+        )
+    else:
+        print(
+            f"Nó {state.node_id} iniciou a eleição {election_id}",
+            flush=True,
+        )
     threading.Thread(
         target=run_election,
         args=(state, election_id),
@@ -157,7 +167,11 @@ class NodeService(node_pb2_grpc.NodeServicer):
             )
 
         if should_start_election:
-            start_election(self.state, request.election_id)
+            start_election(
+                self.state,
+                request.election_id,
+                originated_by=request.sender_id,
+            )
 
         return node_pb2.OkMsg(
             responder_id=self.state.node_id,
@@ -176,7 +190,8 @@ class NodeService(node_pb2_grpc.NodeServicer):
 
         if accepted:
             print(
-                f"Novo coordenador reconhecido: Nó {request.coordinator_id}",
+                f"Novo coordenador reconhecido: Nó {request.coordinator_id} "
+                f"(eleição {request.election_id})",
                 flush=True,
             )
 
@@ -262,7 +277,6 @@ def main() -> None:
     server.start()
     print(f"Nó {node_id} escutando na porta {port}", flush=True)
 
-    print(f"Nó {node_id} iniciando eleição", flush=True)
     start_election(state)
 
     threading.Thread(
