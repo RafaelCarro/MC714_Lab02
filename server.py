@@ -1,4 +1,6 @@
 import os
+import signal
+import sys
 import threading
 import time
 from concurrent import futures
@@ -27,6 +29,7 @@ class NodeState:
         rpc_timeout: float,
         heartbeat_interval: float,
         failure_threshold: int,
+        enable_metrics_logs: bool = False,
     ) -> None:
         self.node_id = node_id
         self.coordinator_id: Optional[int] = coordinator_id
@@ -36,7 +39,13 @@ class NodeState:
         self.rpc_timeout = rpc_timeout
         self.heartbeat_interval = heartbeat_interval
         self.failure_threshold = failure_threshold
+        self.enable_metrics_logs = enable_metrics_logs
         self.lock = threading.Lock()
+
+
+def log_msg(state: NodeState, msg: str) -> None:
+    if state.enable_metrics_logs:
+        print(f"[MSG] {msg}", flush=True)
 
 
 def run_election(state: NodeState, election_id: int) -> None:
@@ -48,6 +57,10 @@ def run_election(state: NodeState, election_id: int) -> None:
     higher_node_responded = False
 
     for node_id in higher_nodes:
+        log_msg(
+            state,
+            f"type=ElectionMsg dir=SENT from={state.node_id} to={node_id} election_id={election_id}",
+        )
         try:
             with grpc.insecure_channel(state.endpoints[node_id]) as channel:
                 stub = node_pb2_grpc.NodeStub(channel)
@@ -60,8 +73,12 @@ def run_election(state: NodeState, election_id: int) -> None:
                 )
             if response.accepted:
                 higher_node_responded = True
+                log_msg(
+                    state,
+                    f"type=OkMsg dir=RECV from={node_id} to={state.node_id} election_id={election_id}",
+                )
                 print(
-                    f"Eleição {election_id}: nó {node_id} respondeu OK",
+                    f"Eleição {election_id}: nó {node_id} respondeu OK (assumiu a eleição)",
                     flush=True,
                 )
         except grpc.RpcError:
@@ -87,13 +104,10 @@ def run_election(state: NodeState, election_id: int) -> None:
     announce_coordinator(state, election_id)
 
 
-def start_election(
-    state: NodeState,
-    election_id: int | None = None,
-    originated_by: int | None = None,
-) -> None:
+def start_election(state: NodeState, election_id: int | None = None) -> None:
+    is_initiator = election_id is None
     with state.lock:
-        if election_id is None:
+        if is_initiator:
             election_id = max(state.current_election_id + 1, time.time_ns())
         if election_id < state.current_election_id:
             return
@@ -103,12 +117,7 @@ def start_election(
         state.coordinator_id = None
         state.election_active = True
 
-    if originated_by is not None:
-        print(
-            f"Nó {state.node_id} assumiu a eleição {election_id} do nó {originated_by}",
-            flush=True,
-        )
-    else:
+    if is_initiator:
         print(
             f"Nó {state.node_id} iniciou a eleição {election_id}",
             flush=True,
@@ -124,6 +133,10 @@ def announce_coordinator(state: NodeState, election_id: int) -> None:
     for node_id, endpoint in state.endpoints.items():
         if node_id == state.node_id:
             continue
+        log_msg(
+            state,
+            f"type=CoordinatorMsg dir=SENT from={state.node_id} to={node_id} election_id={election_id}",
+        )
         try:
             with grpc.insecure_channel(endpoint) as channel:
                 stub = node_pb2_grpc.NodeStub(channel)
@@ -135,6 +148,10 @@ def announce_coordinator(state: NodeState, election_id: int) -> None:
                     ),
                     timeout=state.rpc_timeout,
                 )
+            log_msg(
+                state,
+                f"type=AckMsg dir=RECV from={node_id} to={state.node_id} election_id={election_id}",
+            )
         except grpc.RpcError:
             print(
                 f"Anúncio da eleição {election_id} não chegou ao nó {node_id}",
@@ -154,6 +171,10 @@ class NodeService(node_pb2_grpc.NodeServicer):
         )
 
     def StartElection(self, request, context):
+        log_msg(
+            self.state,
+            f"type=ElectionMsg dir=RECV from={request.sender_id} to={self.state.node_id} election_id={request.election_id}",
+        )
         should_start_election = False
         with self.state.lock:
             is_new_election = request.election_id > self.state.current_election_id
@@ -167,32 +188,50 @@ class NodeService(node_pb2_grpc.NodeServicer):
             )
 
         if should_start_election:
-            start_election(
+            start_election(self.state, request.election_id)
+
+        accepted = request.sender_id < self.state.node_id
+        if accepted:
+            log_msg(
                 self.state,
-                request.election_id,
-                originated_by=request.sender_id,
+                f"type=OkMsg dir=SENT from={self.state.node_id} to={request.sender_id} election_id={request.election_id}",
             )
 
         return node_pb2.OkMsg(
             responder_id=self.state.node_id,
             election_id=request.election_id,
-            accepted=request.sender_id < self.state.node_id,
+            accepted=accepted,
         )
 
     def AnnounceCoordinator(self, request, context):
+        log_msg(
+            self.state,
+            f"type=CoordinatorMsg dir=RECV from={request.sender_id} to={self.state.node_id} election_id={request.election_id}",
+        )
         accepted = False
+        state_updated = False
         with self.state.lock:
             if request.election_id >= self.state.current_election_id:
+                state_updated = (
+                    self.state.coordinator_id != request.coordinator_id
+                    or request.election_id > self.state.current_election_id
+                )
                 self.state.current_election_id = request.election_id
                 self.state.coordinator_id = request.coordinator_id
                 self.state.election_active = False
                 accepted = True
 
-        if accepted:
+        if accepted and state_updated:
             print(
                 f"Novo coordenador reconhecido: Nó {request.coordinator_id} "
                 f"(eleição {request.election_id})",
                 flush=True,
+            )
+
+        if accepted:
+            log_msg(
+                self.state,
+                f"type=AckMsg dir=SENT from={self.state.node_id} to={request.sender_id} election_id={request.election_id}",
             )
 
         return node_pb2.AckMsg(
@@ -226,6 +265,9 @@ def heartbeat_loop(state: NodeState) -> None:
                 )
             if not response.alive or response.responder_id != coordinator_id:
                 raise RuntimeError("resposta de heartbeat inválida")
+            with state.lock:
+                if response.election_id > state.current_election_id:
+                    state.current_election_id = response.election_id
             print(
                 f"Ping enviado para Coordenador {coordinator_id}; "
                 f"Pong recebido do nó {response.responder_id}",
@@ -257,10 +299,16 @@ def heartbeat_loop(state: NodeState) -> None:
 def main() -> None:
     node_id = int(os.environ["NODE_ID"])
     port = int(os.getenv("NODE_PORT", "50051"))
-    coordinator_id = int(os.getenv("COORDINATOR_ID", "3"))
+    raw_coord = os.getenv("COORDINATOR_ID", "3")
+    coordinator_id = int(raw_coord) if raw_coord and raw_coord.isdigit() else None
     rpc_timeout = float(os.getenv("RPC_TIMEOUT_SECONDS", "2"))
     heartbeat_interval = float(os.getenv("HEARTBEAT_INTERVAL_SECONDS", "3"))
     failure_threshold = int(os.getenv("HEARTBEAT_FAILURE_THRESHOLD", "2"))
+    enable_metrics_logs = os.getenv("ENABLE_METRICS_LOGS", "0").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
     endpoints = read_endpoints(os.environ["NODE_ENDPOINTS"])
     state = NodeState(
         node_id,
@@ -269,6 +317,7 @@ def main() -> None:
         rpc_timeout,
         heartbeat_interval,
         failure_threshold,
+        enable_metrics_logs=enable_metrics_logs,
     )
 
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
@@ -277,13 +326,21 @@ def main() -> None:
     server.start()
     print(f"Nó {node_id} escutando na porta {port}", flush=True)
 
-    start_election(state)
+    if state.coordinator_id is None or state.node_id >= state.coordinator_id:
+        start_election(state)
 
     threading.Thread(
         target=heartbeat_loop,
         args=(state,),
         daemon=True,
     ).start()
+
+    def handle_stop(signum, frame):
+        server.stop(grace=0)
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, handle_stop)
+    signal.signal(signal.SIGINT, handle_stop)
 
     try:
         server.wait_for_termination()
