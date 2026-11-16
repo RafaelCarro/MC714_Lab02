@@ -1,0 +1,2 @@
+scenario,n_nodes,repetitions,heartbeat_interval_seconds,normal_pass_rate,failure_pass_rate,recovery_pass_rate,convergence_mean_seconds,convergence_stddev_seconds,convergence_p50_seconds,convergence_p95_seconds,recovery_mean_seconds,recovery_stddev_seconds,recovery_p50_seconds,recovery_p95_seconds,messages_mean_total,messages_stddev_total,messages_p50_total,messages_p95_total,avg_election_msgs,avg_ok_msgs,avg_coordinator_msgs,avg_ack_msgs
+scalability_N10,10,10,1.0,1.0,1.0,1.0,1.149,0.127,1.094,1.336,0.0,0.0,0.0,0.0,78.8,61.7,59.0,168.0,13.1,18.9,39.9,6.9

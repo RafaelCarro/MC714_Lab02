@@ -619,6 +619,18 @@ def main() -> None:
         action="store_true",
         help="Disable metric logs [MSG] emission in nodes",
     )
+    parser.add_argument(
+        "--output-results",
+        type=Path,
+        default=BATTERY_RESULTS,
+        help=f"Path to write raw results CSV (default: {BATTERY_RESULTS})",
+    )
+    parser.add_argument(
+        "--output-summary",
+        type=Path,
+        default=BATTERY_SUMMARY,
+        help=f"Path to write summary CSV (default: {BATTERY_SUMMARY})",
+    )
     args = parser.parse_args()
 
     enable_metrics = not args.no_metrics_logs
@@ -682,11 +694,11 @@ def main() -> None:
                 )
             )
 
-    write_results_csv(rows)
-    summarize_battery(rows)
+    write_results_csv(rows, path=args.output_results)
+    summarize_battery(rows, path=args.output_summary)
     print(f"\n✅ Bateria de testes concluída com sucesso!")
-    print(f"   - Resultados brutos: {BATTERY_RESULTS}")
-    print(f"   - Resumo das métricas: {BATTERY_SUMMARY}")
+    print(f"   - Resultados brutos: {args.output_results}")
+    print(f"   - Resumo das métricas: {args.output_summary}")
 
 
 if __name__ == "__main__":

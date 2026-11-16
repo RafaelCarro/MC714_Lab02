@@ -1,0 +1,24 @@
+\section{Código da Implementação}
+\label{sec:codigo}
+
+O código-fonte e os dados experimentais estão disponíveis no repositório:
+\href{https://github.com/RafaelCarro/MC714_Lab02}{https://github.com/RafaelCarro/MC714\_Lab02}.
+O vídeo de explicação e demonstração do sistema estará disponível em:
+\texttt{[Link do vídeo a ser inserido pós-gravação]}.
+
+Comandos para compilação, execução de testes e reprodução dos ensaios:
+\begin{lstlisting}[language=bash]
+# 1. Subir cluster base (N=3):
+docker compose up --build
+# 2. Executar testes unitarios:
+docker compose run --rm node1 pytest -q
+# 3. Experimento de referencia (N=3):
+python3 scripts/run_experiment.py
+# 4. Bateria completa e graficos:
+python3 scripts/run_test_battery.py --scenario all -n 3 5 7 10 --repetitions 10
+python3 scripts/plot_battery.py
+\end{lstlisting}
+
+Os arquivos \texttt{experiments/battery\_results.csv} e
+\texttt{experiments/battery\_summary.csv} armazenam, respectivamente, as medições
+brutas e as métricas consolidadas dos cenários avaliados.

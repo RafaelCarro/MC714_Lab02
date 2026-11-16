@@ -1,0 +1,29 @@
+\section{Modelo do Sistema}
+\label{sec:modelo}
+
+O sistema considera um modelo parcialmente síncrono. Cada chamada RPC possui
+um deadline conhecido, mas o escalonamento dos processos e os atrasos da rede
+podem variar. Os canais utilizam TCP por meio do gRPC e não há garantia de
+entrega quando o processo de destino está indisponível.
+
+As falhas consideradas seguem o modelo de \textit{crash-recovery}: um nó que
+falha interrompe abruptamente suas respostas às chamadas e, ao ser restaurado,
+reinicia como um novo processo com sua configuração inicial (sem persistência
+de estado em disco). O modelo não contempla falhas bizantinas nem partições de
+rede que isolem conjuntos disjuntos de nós.
+
+Os $N$ nós que compõem o sistema ($N \ge 3$) são processos independentes,
+mesmo quando compartilham a mesma máquina física por meio do Docker Compose. O
+maior identificador entre os nós ativos possui prioridade para coordenador. O
+estado local inclui o identificador da eleição corrente, o coordenador
+conhecido e a indicação de eleição em andamento.
+
+As propriedades esperadas são:
+\begin{itemize}
+    \item \textit{segurança}: somente o maior nó ativo se declara coordenador
+    em uma execução sem mensagens antigas atrasadas;
+    \item \textit{vivacidade}: após uma falha permanente, os nós restantes
+    concluem uma nova eleição;
+    \item \textit{detecção}: um atraso isolado não inicia eleição, pois são
+    exigidas duas falhas consecutivas de heartbeat.
+\end{itemize}

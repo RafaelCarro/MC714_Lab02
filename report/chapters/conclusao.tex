@@ -1,0 +1,20 @@
+\section{Conclusão}
+\label{sec:conclusao}
+
+Foi implementado e avaliado um sistema distribuído com eleição Bully, detector de
+falhas por heartbeat e comunicação gRPC entre processos independentes em contêineres
+Docker. A configuração por Docker Compose torna os cenários reprodutíveis,
+enquanto os deadlines explícitos e os identificadores de eleição tornam observável
+o tratamento de falhas e de mensagens obsoletas.
+
+Os testes e os experimentos confirmaram que o maior nó ativo é escolhido como
+coordenador em 100\% dos cenários avaliados. A redução do intervalo de heartbeat
+de 3 s para 1 s reduziu o tempo médio de convergência de 4,900 s para 1,186 s.
+A extensão para clusters com $N \in \{3, 5, 7, 10\}$ nós confirmou a curvatura
+quadrática $\mathcal{O}(N^2)$ de mensagens do algoritmo Bully e demonstrou a
+estabilidade do cluster sob falhas simultâneas de múltiplos líderes e falhas
+intermediárias.
+
+Como trabalhos futuros, sugere-se a avaliação em redes de longa distância (WAN)
+com enlaces assimétricos e a incorporação de mecanismos de quórum majoritário
+para mitigar partições de rede (\textit{split-brain}).

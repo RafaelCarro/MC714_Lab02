@@ -1,0 +1,47 @@
+\section{Metodologia Experimental}
+\label{sec:experimentos}
+
+A avaliação experimental foi conduzida em duas etapas automatizadas e reprodutíveis:
+
+\subsection{Experimento de Referência (\texorpdfstring{$N=3$}{N=3})}
+O script \texttt{scripts/run\_experiment.py} avalia o impacto do intervalo de
+heartbeat ($T \in \{1, 2, 3\}$ s) com deadline de RPC de 2 s e limiar de duas
+falhas consecutivas. A cada repetição, o cluster de 3 nós é iniciado, os
+heartbeats normais são validados e o contêiner do nó 3 é interrompido,
+cronometrando o tempo até o anúncio do nó 2 nos logs dos nós restantes.
+
+\subsection{Bateria Modular de Escalabilidade e Cenários Adversos}
+Para investigar o comportamento do algoritmo sob diferentes topologias, foi
+desenvolvido o script \texttt{scripts/run\_test\_battery.py}, que gera
+arquivos de composição dinâmicos para $N \in \{3, 5, 7, 10\}$ nós. Foram
+avaliados quatro cenários, empregando-se 10 repetições independentes na
+avaliação de escalabilidade e 5 repetições nos demais cenários adversos:
+\begin{enumerate}
+    \item \textbf{Baseline com Recuperação:} Falha do coordenador $N$, eleição de
+    $N-1$, seguida do reinício de $N$, que deve reassumir a liderança via
+    \textit{failback};
+    \item \textbf{Escalabilidade:} Avaliação da latência de convergência e do
+    número de mensagens trocadas na eleição ao variar $N$;
+    \item \textbf{Falhas Simultâneas:} Interrupção concorrente dos dois nós de
+    maior prioridade ($N$ e $N-1$), exigindo que o nó $N-2$ assuma o cluster;
+    \item \textbf{Falha Intermediária:} Interrupção de um nó subordinado
+    ($\lfloor N/2 \rfloor$), verificando que o coordenador permanece estável sem
+    disparar eleições espúrias.
+\end{enumerate}
+
+Para contabilizar a complexidade de comunicação sem modificar o contrato
+\texttt{node.proto}, os servidores registram logs estruturados atômicos com o tipo
+de cada mensagem transmitida quando a variável \texttt{ENABLE\_METRICS\_LOGS=1}
+está ativa. Isso permite computar exatamente a soma de mensagens \texttt{Election},
+\texttt{OK}, \texttt{Coordinator} e \texttt{ACK}.
+
+\subsection{Ambiente de Execução e Configuração do Host}
+Todos os ensaios foram executados em um único computador hospedeiro com a seguinte configuração:
+\begin{itemize}
+    \item \textbf{Processador:} Intel\textsuperscript{\textregistered} Core\texttrademark\ i5-7200U CPU @ 2,50 GHz (2 núcleos físicos, 4 threads);
+    \item \textbf{Memória RAM:} 8 GB DDR4;
+    \item \textbf{Sistema Operacional:} Ubuntu 26.04 LTS (Kernel Linux 7.0 x86\_64);
+    \item \textbf{Ferramentas:} Docker Engine 29.9.3, Docker Compose v5.7.1, Python 3.14.4, gRPC/Protobuf 1.76.0 e Pytest 8.4.2;
+    \item \textbf{Aquecimento (\textit{Warm-up}):} Estabilização de 5 s após o início dos contêineres para validação prévia de heartbeats antes da injeção de falhas;
+    \item \textbf{Duração dos Ensaios:} Duração média de 15 a 20 s por repetição.
+\end{itemize}

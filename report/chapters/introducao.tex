@@ -1,0 +1,31 @@
+\section{Introdução}
+\label{sec:introducao}
+
+Sistemas distribuídos frequentemente recorrem a um processo coordenador para
+organizar ações que dependem de uma visão única ou sequenciamento centralizado.
+Como processos estão sujeitos a falhas arbitrárias e não anunciadas, essa
+coordenação deve ser combinada com um detector de falhas capaz de identificar a
+indisponibilidade do líder e acionar um protocolo de eleição para restabelecer
+o serviço.
+
+Este trabalho implementa o algoritmo clássico de eleição Bully (Valentão) e um detector
+de falhas periódico baseado em \textit{heartbeat}~\cite{tanenbaum2023}, avaliados sobre contêineres
+Docker independentes comunicando-se via gRPC com \textit{deadlines} explícitos.
+O nó ativo de maior identificador detém a prioridade de liderança. Cada seguidor
+verifica periodicamente o coordenador; ao constatar duas falhas consecutivas,
+inicia uma eleição e notifica os demais participantes.
+
+Além de validar as propriedades de correção no cenário base e examinar o impacto
+do intervalo de \textit{heartbeat} no tempo de convergência, o trabalho investiga
+o comportamento do sistema ao escalar o cluster para $N \in \{3, 5, 7, 10\}$ nós.
+Especificamente, avalia-se:
+\begin{enumerate}
+    \item o crescimento do número de mensagens trocadas na eleição em função de
+    $N$, confrontando a complexidade teórica $\mathcal{O}(N^2)$ com os dados
+    empíricos coletados;
+    \item a estabilidade do tempo de convergência algorítmica ao variar o tamanho
+    da topologia;
+    \item a resiliência do protocolo diante de cenários adversos, incluindo a
+    queda simultânea dos dois nós de maior prioridade e a interrupção de nós
+    subordinados intermediários.
+\end{enumerate}

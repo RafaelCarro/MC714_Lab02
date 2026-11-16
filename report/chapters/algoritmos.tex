@@ -1,0 +1,40 @@
+\section{Algoritmos Implementados}
+\label{sec:algoritmos}
+
+\subsection{Detector de Falhas}
+
+Nós que não são coordenadores executam um laço periódico. A cada intervalo,
+enviam \texttt{Heartbeat} ao coordenador conhecido. Uma resposta válida zera o
+contador de falhas consecutivas. Um timeout, uma resposta inválida ou um
+coordenador ausente incrementa esse contador. Ao atingir o limiar configurado,
+o nó inicia uma eleição e zera o contador.
+
+\subsection{Eleição Bully}
+
+O iniciador envia \texttt{StartElection} aos nós de identificador maior. Um
+destino maior responde com \texttt{accepted=true} e inicia sua própria eleição
+quando necessário. Se nenhum nó maior responder, o iniciador atualiza seu
+coordenador local e envia \texttt{AnnounceCoordinator} aos demais nós.
+
+O acesso ao estado compartilhado é protegido por um lock. Assim, a atualização
+do identificador da eleição, do coordenador e do indicador de eleição ativa é
+atômica em relação aos callbacks RPC e ao laço de heartbeat. O tratamento de
+eleições antigas impede que anúncios atrasados substituam uma eleição mais
+recente.
+
+\subsection{Pseudocódigo}
+
+O comportamento do detector pode ser resumido como:
+\par\medskip
+\par\smallskip
+\begin{lstlisting}[language={}]
+enquanto o processo estiver ativo:
+    se este no nao for o coordenador:
+        enviar Heartbeat com deadline
+        se resposta valida: falhas <- 0
+        caso contrario: falhas <- falhas + 1
+        se falhas >= limiar:
+            iniciar_eleicao()
+            falhas <- 0
+    aguardar intervalo
+\end{lstlisting}

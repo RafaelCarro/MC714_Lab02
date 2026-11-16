@@ -71,8 +71,8 @@ def run_configuration(interval: float, repetition: int) -> dict[str, object]:
     normal_heartbeats = len(HEARTBEAT_PATTERN.findall(normal_logs))
     normal_passed = normal_heartbeats >= 2
 
-    failure_injected_at = time.monotonic()
     compose("stop", "-t", "1", "node3", env=env)
+    failure_injected_at = time.monotonic()
     deadline = failure_injected_at + 20
     failure_winner = ""
     while time.monotonic() < deadline:
@@ -90,8 +90,8 @@ def run_configuration(interval: float, repetition: int) -> dict[str, object]:
     failure_convergence = round(time.monotonic() - failure_injected_at, 3)
     failure_passed = (failure_winner == "2")
 
-    recovery_injected_at = time.monotonic()
     compose("start", "node3", env=env)
+    recovery_injected_at = time.monotonic()
     deadline = recovery_injected_at + 20
     recovery_winner = ""
     while time.monotonic() < deadline:

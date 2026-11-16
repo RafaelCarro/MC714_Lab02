@@ -1,0 +1,41 @@
+\section{Discussão e Análise}
+\label{sec:discussao}
+
+Os testes unitários e as baterias automatizadas em contêineres comprovaram as
+propriedades de correção formal definidas para o sistema:
+\begin{enumerate}
+    \item \textit{Segurança (Safety):} em todos os ensaios, apenas o nó de maior
+    identificador ativo proclamou-se coordenador, e mensagens com
+    \texttt{election\_id} desatualizado foram descartadas sem corromper o estado;
+    \item \textit{Vivacidade (Liveness):} mesmo sob falhas simultâneas dos dois nós
+    de maior prioridade, o cluster convergiu para um novo líder dentro do prazo,
+    sem travamentos (\textit{deadlocks}) ou oscilações (\textit{livelocks});
+    \item \textit{Detecção:} atrasos pontuais inferiores ao limiar de duas
+    verificações não causaram eleições indevidas, como demonstrado na estabilidade
+    do líder durante o teste de falha intermediária.
+\end{enumerate}
+
+\subsection{Complexidade de Mensagens e Inicialização}
+A análise experimental confirma o custo de comunicação $\mathcal{O}(N^2)$ inerente
+ao algoritmo Bully clássico no pior caso. Observa-se ainda um elevado desvio padrão
+no volume de mensagens para $N=10$ (com medições variando entre 22 e 195 mensagens).
+Essa alta dispersão é intrínseca à assimetria do protocolo em relação a qual nó
+detecta a falha primeiro: se o maior nó sobrevivente ($N-1$) constata a
+indisponibilidade antes dos demais, ele contata apenas o líder inativo e declara
+vitória com sobrecarga mínima; por outro lado, se um nó subordinado de baixo
+identificador detecta a falha, ele convoca todos os superiores, desencadeando a
+propagação em cascata e a tempestade quadrática de mensagens prevista teoricamente.
+
+Para mitigar esse impacto durante a subida conjunta do cluster, foi implementada
+uma política de inicialização na qual apenas nós com $ID \ge ID_{coord}$ (ou quando
+não há coordenador pré-definido) iniciam eleições ativas. Isso reduz o tráfego de
+\textit{bootstrapping} para $\mathcal{O}(N)$, reservando a eleição completa para
+quando falhas reais forem detectadas.
+
+\subsection{Limitações do Ambiente}
+Embora cada nó lógico execute isolado em um contêiner Docker independente, todos os processos residem na mesma máquina física. Essa configuração impõe limitações práticas fundamentais:
+\begin{enumerate}
+    \item \textbf{Domínio Único de Falha:} Os contêineres compartilham o mesmo hardware e o núcleo do sistema operacional host. Consequentemente, uma falha de hardware ou parada do daemon do Docker encerra simultaneamente 100\% dos nós do sistema, não representando nós com domínios de falha independentes;
+    \item \textbf{Canal Virtual e Latência:} A comunicação via rede em ponte (\textit{bridge}) opera inteiramente em memória local do host, apresentando latência sub-milissegúndica e perda de pacotes quase nula. Em redes geograficamente distribuídas (WAN) com enlaces assimétricos e partições de rede (\textit{split-brain}), o algoritmo Bully clássico não garante consenso sem mecanismos de quórum majoritário, sendo recomendadas abordagens baseadas em Paxos ou Raft para tais cenários;
+    \item \textbf{Contenção de CPU:} A disputa por ciclos de processamento e agendamento no host durante tempestades de mensagens de eleição pode atrasar o processamento de respostas RPC, tornando indispensável a calibração de \textit{deadlines} e limiares de tolerância a atrasos transitórios.
+\end{enumerate}

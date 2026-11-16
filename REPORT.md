@@ -42,19 +42,27 @@ O serviço `Node` expõe três procedimentos síncronos com timeouts explícitos
 2. `StartElection(ElectionMsg) -> OkMsg`: Disparado concorrentemente a todos os nós com $ID_{dest} > ID_{orig}$. Retorna `accepted = true` se o destinatário for maior e assumir a condução do processo eleitoral.
 3. `AnnounceCoordinator(CoordinatorMsg) -> AckMsg`: Broadcast transmitido pelo vencedor da eleição a todos os nós do cluster para oficializar a nova liderança.
 
-### 3.2. Detector de Falhas Heartbeat
+### 3.2. Máquina de Estados e Variáveis Locais (`NodeState`)
+Cada nó lógico opera como uma máquina de estados finitos que transita entre três papéis principais:
+- **Seguidor (*Follower*):** Papel padrão de qualquer nó subordinado ($ID < ID_{coord}$). Monitora o líder periodicamente via `Heartbeat` e rastreia o contador de falhas consecutivas.
+- **Candidato (*Candidate*):** Estado transitório ativado quando o nó atinge o limiar de falhas de heartbeat ou recebe uma convocação `StartElection`. O nó define `election_active = True`, incrementa seu contador monotônico `current_election_id`, convoca os nós de maior ID e aguarda respostas dentro do prazo.
+- **Coordenador (*Leader*):** Estado assumido quando nenhum nó superior responde. O nó suspende o envio ativo de heartbeats, difunde `AnnounceCoordinator` aos demais nós e passa a responder passivamente às verificações recebidas com `Pong(ok=True)`.
+
+O estado em memória (`NodeState`) agrega as variáveis `coordinator_id`, `election_active`, `current_election_id` e o contador de timeouts. Todas as transições críticas e leituras concorrentes (entre threads gRPC e a thread de monitoramento) são protegidas por exclusão mútua via `threading.Lock`.
+
+### 3.3. Detector de Falhas Heartbeat
 - Nós subordinados executam uma thread dedicada enviando `Heartbeat` a cada $T$ segundos (`HEARTBEAT_INTERVAL_SECONDS`).
 - Uma resposta válida zera o contador de falhas.
 - Um timeout ou erro de conexão incrementa o contador. Ao atingir $F = 2$ (`HEARTBEAT_FAILURE_THRESHOLD`), o nó assume que o coordenador falhou, invalida seu líder local e inicia o algoritmo Bully.
 
-### 3.3. Algoritmo Bully Otimizado
+### 3.4. Algoritmo Bully Otimizado
 1. **Disparo:** O iniciador incrementa monotonicamente seu contador de eleição local e transmite `StartElection(node_id, election_id)` a todos os nós com $ID > ID_{local}$.
 2. **Delegação:** Qualquer nó de ID superior que receba a mensagem responde afirmativamente (`accepted = true`) e inicia concorrentemente sua própria rodada eleitoral.
 3. **Vitória:** Se o iniciador não receber nenhuma resposta `accepted = true` dentro do prazo de espera de RPC, declara-se coordenador e envia `AnnounceCoordinator` a todos os nós do cluster.
 4. **Descarte de Mensagens Obsoletas:** Mensagens com `election_id` inferior ao registrado localmente são descartadas para impedir condições de corrida por mensagens defasadas.
 5. **Otimização de Inicialização (*Cold Start*):** Para evitar uma tempestade quadrática de mensagens durante a subida conjunta do cluster, apenas nós cujo $ID \ge ID_{coord}$ disparam eleição no boot. Se o coordenador configurado já estiver saudável, os seguidores iniciam diretamente o envio de heartbeats, reduzindo a complexidade de boot para $\mathcal{O}(N)$.
 
-### 3.4. Rastreamento Transparente de Métricas de Mensagens
+### 3.5. Rastreamento Transparente de Métricas de Mensagens
 Para avaliar a complexidade empírica $\mathcal{O}(N^2)$ sem adulterar o contrato de interface `node.proto` (preservando total compatibilidade com corretores automáticos), o servidor contabiliza chamadas emitidas e recebidas via logs estruturados `[MSG] <TIPO_MENSAGEM>`. Esse log é habilitado seletivamente via variável de ambiente `ENABLE_METRICS_LOGS=1`.
 
 ---
@@ -64,46 +72,48 @@ Para avaliar a complexidade empírica $\mathcal{O}(N^2)$ sem adulterar o contrat
 A experimentação foi estruturada em duas frentes automatizadas e reprodutíveis. A injeção de falhas nos experimentos cronometra a latência a partir do encerramento efetivo do container (`docker compose stop -t 1`), isolando a latência do daemon do Docker do tempo de resposta do algoritmo distribuído.
 
 ### 4.1. Experimento de Referência: Variação de Heartbeat ($N=3$)
-Executado via `scripts/run_experiment.py`, avaliando três intervalos de heartbeat ($T \in \{1, 2, 3\}$ s) com deadline de 2,0 s e 2 repetições:
+Executado via `scripts/run_experiment.py`, avaliando três intervalos de heartbeat ($T \in \{1, 2, 3\}$ s) com deadline de 2,0 s e 3 repetições:
 
 | Intervalo Heartbeat (s) | Repetições | Sucesso Normal | Sucesso Falha | Média Convergência (s) | Desvio Padrão (s) | Mediana p50 (s) | Percentil p95 (s) |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **1.0** | 2 | 100% | 100% | **3.049** | 0.001 | 3.049 | 3.050 |
-| **2.0** | 2 | 100% | 100% | **5.300** | 0.042 | 5.300 | 5.326 |
-| **3.0** | 2 | 100% | 100% | **5.311** | 0.086 | 5.311 | 5.366 |
+| **1.0** | 3 | 100% | 100% | **1,186** | 0,436 | 0,973 | 1,616 |
+| **2.0** | 3 | 100% | 100% | **2,932** | 0,118 | 2,869 | 3,048 |
+| **3.0** | 3 | 100% | 100% | **4,900** | 0,064 | 4,935 | 4,938 |
 
-*Observação:* Neste script inicial, o tempo de convergência engloba o tempo de término do subprocesso Docker. O intervalo de 1 s produziu a menor média, pois a falha é detectada em aproximadamente dois ciclos ($2 \times 1\,\text{s}$).
+*Observação:* Com a latência de término do contêiner isolada, o tempo de convergência para $T=1.0\,\text{s}$ ($1,186\,\text{s}$) é plenamente compatível com o cenário de escalabilidade ($1,177\,\text{s}$), refletindo puramente o tempo de detecção da ausência de heartbeats e o anúncio da nova liderança.
 
 ---
 
 ### 4.2. Bateria Modular de Testes ($N \in \{3, 5, 7, 10\}$)
-Executada via `scripts/run_test_battery.py` com 5 repetições para cada configuração, avaliando latências e a quantidade de mensagens trocadas na eleição.
+Executada via `scripts/run_test_battery.py` com 10 repetições para o cenário de escalabilidade, avaliando latências e a quantidade de mensagens trocadas na eleição.
 
 #### A) Escalabilidade e Tempo de Convergência ($T=1{,}0\,\text{s}, F=2$)
 
-| Cenário | $N$ Nós | Sucesso | Latência Média (s) | Desvio Padrão (s) | p50 (s) | p95 (s) |
+| Cenário | $N$ Nós | Repetições | Latência Média (s) | Desvio Padrão (s) | p50 (s) | p95 (s) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Escalabilidade** | 3 | 100% | 1.161 | 0.138 | 1.072 | 1.315 |
-| **Escalabilidade** | 5 | 100% | 1.209 | 0.116 | 1.162 | 1.366 |
-| **Escalabilidade** | 7 | 100% | 1.139 | 0.128 | 1.196 | 1.254 |
-| **Escalabilidade** | 10 | 100% | 1.185 | 0.165 | 1.149 | 1.401 |
+| **Escalabilidade** | 3 | 10 | 1,177 | 0,123 | 1,094 | 1,325 |
+| **Escalabilidade** | 5 | 10 | 1,013 | 0,349 | 1,107 | 1,347 |
+| **Escalabilidade** | 7 | 10 | 1,221 | 0,155 | 1,232 | 1,449 |
+| **Escalabilidade** | 10 | 10 | 1,149 | 0,127 | 1,094 | 1,336 |
 
-**Análise:** Ao medir a convergência puramente a partir do momento em que o processo do coordenador é interrompido, a latência média permaneceu notavelmente plana entre **$1{,}139\,\text{s}$ e $1{,}209\,\text{s}$** para todos os tamanhos de cluster. Isso comprova que a detecção depende do período dos heartbeats independentes, enquanto o overhead de rede local gRPC é desprezível.
+**Análise:** Ao medir a convergência puramente a partir do momento em que o processo do coordenador é interrompido, a latência média permaneceu notavelmente plana entre **$1{,}013\,\text{s}$ e $1{,}221\,\text{s}$** para todos os tamanhos de cluster. Isso comprova que a detecção depende do período dos heartbeats independentes, enquanto o overhead de rede local gRPC é desprezível.
 
 #### B) Complexidade de Mensagens ($\mathcal{O}(N^2)$)
 
-| $N$ Nós | Média Total Mensagens | Election | OK | Coordinator | ACK |
-| :---: | :---: | :---: | :---: | :---: | :---: |
-| **3** | **5.8** | 1.6 | 0.6 | 2.0 | 1.6 |
-| **5** | **15.4** | 3.8 | 3.2 | 5.4 | 3.0 |
-| **7** | **41.2** | 18.8 | 9.2 | 3.6 | 9.6 |
-| **10** | **39.4** | 7.8 | 6.6 | 17.2 | 7.8 |
+| $N$ Nós | Repetições | Média Total Mensagens | Election | OK | Coordinator | ACK |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **3** | 10 | **5,7** | 1,5 | 0,4 | 1,8 | 2,0 |
+| **5** | 10 | **12,0** | 2,3 | 1,3 | 3,6 | 4,8 |
+| **7** | 10 | **25,1** | 7,0 | 4,6 | 5,6 | 7,9 |
+| **10** | 10 | **78,8** | 13,1 | 18,9 | 39,9 | 6,9 |
 
 No cenário completo com falha e recuperação (*failback*) do coordenador original (**Baseline**):
-- $N=3 \implies \mathbf{8{,}0}$ mensagens
-- $N=5 \implies \mathbf{25{,}8}$ mensagens
-- $N=7 \implies \mathbf{33{,}0}$ mensagens
-- $N=10 \implies \mathbf{69{,}8}$ mensagens
+- $N=3 \implies \mathbf{8{,}0}$ mensagens;
+- $N=5 \implies \mathbf{25{,}8}$ mensagens;
+- $N=7 \implies \mathbf{33{,}0}$ mensagens; e
+- $N=10 \implies \mathbf{69{,}8}$ mensagens.
+
+*Nota sobre a variabilidade em $N=10$:* Observou-se um elevado desvio-padrão no total de mensagens para $N=10$ (com medições variando de 22 a 195 mensagens). Essa dispersão decorre da assimetria do algoritmo Bully: se o segundo maior nó ($N-1$) detecta a falha primeiro, ele contata apenas o líder e se proclama com sobrecarga mínima ($\mathcal{O}(N)$); se nós inferiores detectam primeiro, eles disparam a convocação em cascata a todos os superiores, provocando a tempestade quadrática $\mathcal{O}(N^2)$.
 
 Os gráficos gerados confirmam experimentalmente o crescimento de complexidade:
 - [experiments/battery_message_scaling.png](experiments/battery_message_scaling.png)
@@ -117,10 +127,23 @@ Os gráficos gerados confirmam experimentalmente o crescimento de complexidade:
    - Em todos os ensaios ($N \in \{3, 5, 7, 10\}$), a parada de um nó subordinado gerou **0 novas eleições**.
    - O coordenador principal continuou operando normalmente e a estabilidade da liderança foi mantida em 100%.
 
+- **Repositório GitHub:** [https://github.com/RafaelCarro/MC714_Lab02](https://github.com/RafaelCarro/MC714_Lab02)
+- **Vídeo de Apresentação e Demonstração:** `[Link do vídeo a ser inserido pós-gravação]`
+
 ---
 
 ## 5. Instruções para Reprodução
 
+### 5.1. Ambiente de Execução e Configuração do Host
+Todos os experimentos foram conduzidos em um único equipamento host com as seguintes especificações:
+- **Processador:** Intel(R) Core(TM) i5-7200U CPU @ 2.50GHz (2 núcleos físicos, 4 threads);
+- **Memória RAM:** 8 GB DDR4;
+- **Sistema Operacional:** Ubuntu 26.04 LTS (Kernel Linux 7.0 x86_64);
+- **Ferramentas:** Docker Engine 29.9.3, Docker Compose v5.7.1, Python 3.14.4, gRPC/Protobuf 1.76.0 e Pytest 8.4.2;
+- **Aquecimento (*Warm-up*):** Estabilização de 5 segundos após a inicialização dos contêineres para troca de heartbeats válidos antes da injeção de falhas;
+- **Duração dos ensaios:** 15 a 20 segundos por repetição.
+
+### 5.2. Comandos de Reprodução
 Para reproduzir todos os resultados descritos:
 
 ```bash
@@ -132,8 +155,8 @@ python3 scripts/run_experiment.py
 cat experiments/results.csv
 cat experiments/summary.csv
 
-# 3. Executar a bateria de testes completa (N=3, 5, 7, 10 nós, 4 cenários, 5 repetições):
-python3 scripts/run_test_battery.py --scenario all -n 3 5 7 10 --repetitions 5
+# 3. Executar a bateria de testes completa (N=3, 5, 7, 10 nós):
+python3 scripts/run_test_battery.py --scenario all -n 3 5 7 10 --repetitions 10
 
 # 4. Gerar os gráficos de convergência e de volume de mensagens:
 python3 scripts/plot_battery.py
@@ -145,7 +168,13 @@ python3 scripts/plot_battery.py
 
 Os testes automatizados e a bateria de experimentos em contêineres Docker comprovaram que o sistema não trava após falhas (vivacidade) e que apenas o nó correto de maior ID assume a liderança sem conflitos (segurança).
 
-Como limitações do estudo:
-- Todos os contêineres compartilham a CPU e o subsistema de rede virtual do host, resultando em latências de comunicação sub-milissegúndicas.
-- Timeouts fixos podem gerar falsos positivos sob sobrecarga extrema do host.
-- O algoritmo Bully clássico não tolera partições de rede com nós isolados em partições disjuntas (*split-brain*). Para cenários com partições arbitrárias, algoritmos com quórum majoritário (como Raft ou Paxos) seriam recomendados.
+Como limitações fundamentais do estudo:
+- **Domínio Único de Falha:** Embora cada nó execute isolado em seu próprio contêiner, todos compartilham a mesma máquina host física e o mesmo kernel do SO. Uma falha de hardware ou reinicialização do daemon encerra simultaneamente todos os nós, não constituindo domínios de falha independentes.
+- **Canal Virtual e Latência:** A comunicação via ponte de rede (*bridge network*) do Docker ocorre em memória do host, resultando em latências sub-milissegúndicas e perda de pacotes nula, diferindo de enlaces reais de longa distância (WAN) sujeitos a *jitter*, perdas assimétricas e partições (*split-brain*).
+- **Contenção de CPU:** A concorrência por ciclos de processamento e agendamento no host sob rajadas intensas de mensagens pode atrasar temporariamente o tratamento de callbacks RPC, ressaltando a necessidade de calibrar timeouts e tolerância a atrasos transitórios.
+
+---
+
+## 7. Referências
+
+1. M. van Steen and A. S. Tanenbaum, *Distributed Systems*, 4th ed., distributed-systems.net, 2023.

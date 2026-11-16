@@ -1,0 +1,18 @@
+\begin{abstract}
+Este trabalho apresenta a implementação e avaliação experimental de um sistema
+distribuído que executa o algoritmo de eleição Bully e utiliza heartbeats
+periódicos para detectar falhas do coordenador. Os nós são executados como
+processos independentes em contêineres Docker e comunicam-se exclusivamente via
+gRPC com deadlines explícitos. Além do cenário base com três nós e variação do
+intervalo de heartbeat, a solução foi avaliada em uma bateria modular com clusters
+de $N \in \{3, 5, 7, 10\}$ nós, investigando a complexidade de mensagens
+$\mathcal{O}(N^2)$, a tolerância a falhas simultâneas dos maiores nós e a estabilidade
+diante de falhas intermediárias. Os resultados confirmaram 100\% de sucesso em
+todos os cenários, demonstrando a constância da latência de convergência
+($\approx 1{,}15\,\text{s}$) e o crescimento quadrático na troca de mensagens de controle.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Sistemas distribuídos, algoritmo Bully, eleição de líder, detector de falhas,
+gRPC, Docker Compose, complexidade de mensagens.
+\end{IEEEkeywords}

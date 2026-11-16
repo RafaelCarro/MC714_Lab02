@@ -1,0 +1,73 @@
+\UseRawInputEncoding
+\documentclass[conference]{IEEEtran}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[provide=*]{babel}
+\babelprovide[main, import]{brazilian}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    urlcolor=blue,
+    citecolor=black
+}
+
+\lstset{
+    basicstyle=\footnotesize\ttfamily,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny,
+    showstringspaces=false
+}
+
+\hyphenation{gRPC Docker coor-denador elei-ção}
+
+\IEEEoverridecommandlockouts
+
+\begin{document}
+
+\title{TRABALHO II\\Eleição Bully e Detector de Falhas em um Sistema Distribuído\thanks{Repositório do projeto: \href{https://github.com/RafaelCarro/MC714_Lab02}{https://github.com/RafaelCarro/MC714\_Lab02}. Vídeo de apresentação e demonstração: \texttt{[Link do vídeo a ser inserido pós-gravação]}.}}
+
+\author{
+    \IEEEauthorblockN{Rafael Carro Gaudim}
+    \IEEEauthorblockA{RA: 240879\\
+    Instituto de Computação -- UNICAMP}
+    \and
+    \IEEEauthorblockN{Douglas Henrique Pereira}
+    \IEEEauthorblockA{RA: 245202\\
+    Instituto de Computação -- UNICAMP}
+}
+
+\markboth{MC714: SISTEMAS DISTRIBUÍDOS}{TRABALHO II}
+
+\maketitle
+
+\input{chapters/resumo}
+\input{chapters/introducao}
+\input{chapters/modelo}
+\input{chapters/arquitetura}
+\input{chapters/algoritmos}
+\input{chapters/experimentos}
+\input{chapters/resultados}
+\input{chapters/discussao}
+\input{chapters/conclusao}
+
+\begin{thebibliography}{1}
+\bibitem{tanenbaum2023}
+M.~van Steen e A.~S.~Tanenbaum, \emph{Distributed Systems}, 4ª~ed.\hskip 1em plus
+  0.5em minus 0.4em\relax distributed-systems.net, 2023.
+\end{thebibliography}
+
+\appendices
+\input{chapters/codigo}
+\input{chapters/divisao}
+
+\end{document}

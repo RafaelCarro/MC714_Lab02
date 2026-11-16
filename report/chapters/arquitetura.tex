@@ -1,0 +1,35 @@
+\section{Arquitetura e Comunicação}
+\label{sec:arquitetura}
+
+Cada contêiner executa uma instância do servidor Python. A configuração define
+o identificador do nó, a porta local, o coordenador inicial e o endereço dos
+demais nós. A rede é criada pelo Docker Compose e cada serviço escuta a porta
+50051 dentro do contêiner.
+
+O contrato de comunicação é definido em \texttt{node.proto}. O serviço
+\texttt{Node} oferece três RPCs:
+\begin{enumerate}
+    \item \texttt{Heartbeat}, que retorna um \texttt{Pong} com o identificador
+    do respondente e seu estado de disponibilidade;
+    \item \texttt{StartElection}, que inicia ou propaga uma eleição e retorna
+    se a solicitação foi aceita;
+    \item \texttt{AnnounceCoordinator}, que informa o coordenador escolhido e
+    retorna a confirmação de aplicação do anúncio.
+\end{enumerate}
+
+Todas as chamadas utilizam o parâmetro \texttt{timeout} do cliente gRPC. Dessa
+forma, a ausência de resposta é observável pelo processo chamador e pode ser
+tratada como falha de comunicação. Os stubs Python são gerados
+automaticamente a partir do arquivo Protocol Buffers durante a construção da
+imagem Docker.
+
+\subsection{Estados e Identificadores}
+
+Cada nó opera como uma máquina de estados finitos que transita entre três papéis principais:
+\begin{enumerate}
+    \item \textbf{Seguidor (\textit{Follower}):} Papel operacional padrão ($ID < ID_{coord}$). O nó monitora periodicamente o coordenador conhecido por meio de chamadas RPC \texttt{Heartbeat} e contabiliza timeouts consecutivos;
+    \item \textbf{Candidato (\textit{Candidate}):} Estado transitório assumido quando o nó constata a ausência do coordenador ou recebe uma convocação \texttt{StartElection}. O indicador \texttt{election\_active} torna-se verdadeiro, o nó incrementa o identificador monotônico (\texttt{current\_election\_id}), dispara convocações aos nós superiores e aguarda respostas dentro do prazo estipulado;
+    \item \textbf{Coordenador (\textit{Leader}):} Assumido quando nenhum nó de identificador maior responde. O nó suspende o laço de envio ativo de heartbeats, difunde \texttt{AnnounceCoordinator} a todos os nós e passa a responder passivamente às verificações recebidas com \texttt{Pong(ok=True)}.
+\end{enumerate}
+
+Para garantir consistência sob concorrência entre threads do gRPC e o laço de verificação periódica, o estado local em memória (\texttt{NodeState}) agrega o coordenador atual (\texttt{coordinator\_id}), o contador monotônico de versão da eleição (\texttt{current\_election\_id}), o indicador de eleição ativa e o contador de falhas consecutivas. Todas as leituras e transições de estado críticas são protegidas por exclusão mútua via \texttt{threading.Lock}, impedindo que respostas atrasadas ou mensagens obsoletas de eleições anteriores sobrescrevam um estado mais recente.
