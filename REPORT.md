@@ -5,7 +5,7 @@
 - Douglas Henrique Pereira — RA: 245202  
 **Disciplina:** MC714 (Sistemas Distribuídos) — 2º Semestre de 2026 — Instituto de Computação, UNICAMP  
 **Repositório:** [https://github.com/RafaelCarro/MC714_Lab02](https://github.com/RafaelCarro/MC714_Lab02)  
-**Vídeo de Apresentação:** `[Link do vídeo a ser inserido pós-gravação]`
+**Vídeo de Apresentação:** [https://youtu.be/bssPcbm8a4E](https://youtu.be/bssPcbm8a4E)
 
 ---
 
