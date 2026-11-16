@@ -34,8 +34,8 @@ comunicação ou falha do nó, conforme o cenário do experimento.
 6. O coordenador informa sua vitória aos demais nós com
 	`AnnounceCoordinator`.
 7. O `election_id` identifica uma execução específica de eleição. Uma nova
-	eleição deve usar um valor diferente.
-	contador local combinado com o ID do nó.
+	eleição deve usar um valor diferente gerado a partir de um contador local
+	combinado com o ID do nó.
 8. Mensagens de uma eleição antiga não podem substituir o estado de uma
 	eleição mais nova.
 9. A ausência de resposta a `Heartbeat` dentro do timeout é registrada como

@@ -4,7 +4,8 @@
 - Rafael Carro Gaudim — RA: 240879  
 - Douglas Henrique Pereira — RA: 245202  
 **Disciplina:** MC714 (Sistemas Distribuídos) — 2º Semestre de 2026 — Instituto de Computação, UNICAMP  
-**Repositório:** [MC714_Lab02](.)
+**Repositório:** [https://github.com/RafaelCarro/MC714_Lab02](https://github.com/RafaelCarro/MC714_Lab02)  
+**Vídeo de Apresentação:** `[Link do vídeo a ser inserido pós-gravação]`
 
 ---
 
@@ -126,9 +127,6 @@ Os gráficos gerados confirmam experimentalmente o crescimento de complexidade:
 2. **Falha Intermediária (Queda do nó $\lfloor N/2 \rfloor$):**
    - Em todos os ensaios ($N \in \{3, 5, 7, 10\}$), a parada de um nó subordinado gerou **0 novas eleições**.
    - O coordenador principal continuou operando normalmente e a estabilidade da liderança foi mantida em 100%.
-
-- **Repositório GitHub:** [https://github.com/RafaelCarro/MC714_Lab02](https://github.com/RafaelCarro/MC714_Lab02)
-- **Vídeo de Apresentação e Demonstração:** `[Link do vídeo a ser inserido pós-gravação]`
 
 ---
 
