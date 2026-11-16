@@ -259,10 +259,10 @@ def run_experiment_demo(
         if scenario in ("baseline", "scalability"):
             failed_leader = nodes
             expected_new_leader = nodes - 1
-            banner(f"ETAPA 3: Injetando Falha no Coordenador (Parando Nó {failed_leader})")
-            print(f"{BOLD}{RED}Simulando falha do processo coordenador: docker compose stop node{failed_leader}{RESET}")
+            banner(f"ETAPA 3: Injetando Falha Abrupta no Coordenador (Parando Nó {failed_leader})")
+            print(f"{BOLD}{RED}Simulando falha do processo coordenador: docker compose stop -t 1 node{failed_leader}{RESET}")
             streamer.reset_election_listener()
-            run_command(["docker", "compose", "-f", compose_file, "stop", f"node{failed_leader}"])
+            run_command(["docker", "compose", "-f", compose_file, "stop", "-t", "1", f"node{failed_leader}"])
             t_fail_start = time.perf_counter()
 
             banner(f"ETAPA 4: Detecção de Falha e Eleição Bully em Andamento")
@@ -302,9 +302,9 @@ def run_experiment_demo(
             f1, f2 = nodes, nodes - 1
             expected_new_leader = nodes - 2
             banner(f"ETAPA 3: Falha Simultânea Concorrente dos Nós {f1} e {f2}")
-            print(f"{BOLD}{RED}Derrubando simultaneamente os dois maiores nós: docker compose stop node{f1} node{f2}{RESET}")
+            print(f"{BOLD}{RED}Derrubando abruptamente os dois maiores nós: docker compose stop -t 1 node{f1} node{f2}{RESET}")
             streamer.reset_election_listener()
-            run_command(["docker", "compose", "-f", compose_file, "stop", f"node{f1}", f"node{f2}"])
+            run_command(["docker", "compose", "-f", compose_file, "stop", "-t", "1", f"node{f1}", f"node{f2}"])
             t_fail_start = time.perf_counter()
 
             banner(f"ETAPA 4: Eleição Bully sob Falha Múltipla Concorrente")
@@ -326,10 +326,10 @@ def run_experiment_demo(
         elif scenario == "intermediate":
             interm_node = max(2, nodes // 2)
             banner(f"ETAPA 3: Falha de Nó Intermediário Subordinado (Nó {interm_node})")
-            print(f"{BOLD}{YELLOW}Parando o nó subordinado {interm_node}: docker compose stop node{interm_node}{RESET}")
+            print(f"{BOLD}{YELLOW}Parando o nó subordinado {interm_node}: docker compose stop -t 1 node{interm_node}{RESET}")
             print(f"O coordenador principal (Nó {nodes}) continua em execução e saudável.")
             streamer.reset_election_listener()
-            run_command(["docker", "compose", "-f", compose_file, "stop", f"node{interm_node}"])
+            run_command(["docker", "compose", "-f", compose_file, "stop", "-t", "1", f"node{interm_node}"])
 
             banner(f"ETAPA 4: Verificação de Estabilidade do Líder")
             wait_time = max(5.0, heartbeat_interval * 2.5)
